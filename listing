@@ -1,0 +1,1397 @@
+#!/usr/bin/perl -w
+
+#\section{Pretty-Printing C++/Perl with the `listing' Script}
+
+#tex \copyright\ Copyright 1998 by Chris Traxler $<$christoph.t.traxler\@theo.physik.uni-giessen.de$>$.
+# The GNU general public license applies.
+
+##############################################################################
+# Special thanks go to Nicolas Le Clerc <nleclerc@pobox.com> for working out 
+# a patch that uses Getopt::Long to simplify option handling.
+# I also thank Vadim Belman <voland@plab.ku.dk> for pointing out a bug,
+# and Mathias Weber <mweber@atlas.de> for useful hints regarding POD.
+#-----------------------------------------------------------------------------
+# You are permitted to use and alter this file under the terms of the GNU GPL.
+# If you alter this file (improve the program), I kindly ask you to send 
+# a copy to me at christoph.t.traxler@theo.physik.uni-giessen.de.
+# You can retrieve a copy of the precise license terms at the URL
+# ftp://prep.ai.mit.edu/pub/gnu/COPYING-2.0
+#-----------------------------------------------------------------------------
+# This script can be retrieved from
+# ftp://krabat.physik.uni-giessen.de/pub/traxler/
+##############################################################################
+
+use strict;
+use English;
+use Getopt::Long;
+
+#\subsection{Command-Line Parsing}
+
+my $version='$Id: listing,v 2.15 1998/01/08 17:23:20 cvstraxler Exp $'; # 1.0 was written in flex
+$version =~ s/^.*listing,v ([0-9.\/ ]*) ..:..:.. cvs.*$/$1/;
+
+# prepend the contents of the environment variable LISTING to the command line
+unshift(@ARGV, split(' ', $ENV{'LISTING'})) if(exists $ENV{'LISTING'});
+
+# option hash
+my %option = (
+              'version'       => 0,
+              'begin'         => (-r 'begin.tex') ? 'begin.tex' : '',
+              'listing'       => 'listing', 
+              'styles'        => 'fleqn,twoside',
+              'packages'      => 'a4',
+              'print'         => '',
+              'print2'        => '',
+              'quiet'         => 0, 
+              'latex'         => 1,
+              'xdvi'          => 0,
+              'psfig'         => 1,
+              'index'         => 0,
+              'toc'           => 1,
+              'symbols'       => 1, 
+              'sections'      => 0,
+              'formfeeds'     => 1,
+              'references'    => 0,
+              'preservepod'   => 0
+             );
+
+# get options
+&GetOptions(\%option, 'version', 'begin=s', 'listing=s', 'styles=s', 
+            'packages=s', 'print=s', 'print2=s', 'symbols!', 'psfig!', 
+            'quiet!', 'latex!', 'xdvi!', 'toc!', 'index!', 'sections!', 
+            'formfeeds!', 'references', 'preservepod!');
+
+die "Cannot open ".$option{'begin'}.".\n" if($option{'begin'} && ! -r $option{'begin'});
+
+foreach(@ARGV)
+{
+    die "File $_ is nonexistent/non-readable." unless(-r $_);
+}
+
+$option{'packages'} = 'psfig,'.$option{'packages'} if($option{'psfig'});
+$option{'packages'} .= ',makeidx' if($option{'index'});
+
+if($option{'print'} || $option{'print2'})
+{
+    $option{'latex'}=1;
+    $option{'xdvi'}=0;
+    $option{'quiet'}=1;
+}
+
+$option{'latex'}=1 if($option{'xdvi'});
+$option{'references'}=1 if($option{'index'});
+
+#\subsection{Version Info}
+if(!@ARGV || $option{'version'})
+{
+    print <<EOF;
+listing rev $version. To receive help, type 'perldoc $0' 
+Copyright 1998 by Chris Traxler <christoph.t.traxler\@theo.physik.uni-giessen.de>.
+Special thanks go to Nicolas Le Clerc, Vadim Belman, and Mathias Weber.
+EOF
+
+    exit;
+}
+
+#\subsection{Initialization}
+#tex To control the data conversion C++/Perl $\rightarrow$ LaTeX, we {\bf tag} the file. 
+# This means we insert before each character a special character ("tag") that serves to 
+# indicate which type of text this character belongs to. 
+# Here is an overview of the tags used, in the order they may appear during the 
+# conversion process.
+#
+# 0. C original C++/Perl source code
+# 1. X final LaTeX code
+# 2. W LaTeX representation of whitespace 
+# 3. M LaTeX representation of a comment
+#    S LaTeX representation of a string, regex, quotation, or here-document (multiline string)
+# 4. I LaTeX representation of an identifier
+# 5. T LaTeX representation of special character sequences (such as ->, ::, etc.)
+#    T LaTeX representation of a symbol (like pi, rho, sigma, infty)
+#
+# A special tag is the F (format) tag; it controls font sizes.
+#
+# To prevent the tags to collide with text characters, we replace each tag character that
+# occurs in the text by a "tag protector string". At the end of the conversion, the tags
+# are removed and the tag protectors replaced by their original letters.
+my @tags=(qw(C F X W M S I T));
+my $tag='['.join('',@tags).']';
+my $notag='[^'.join('',@tags).']';
+my %tagprotector;
+
+# LaTeX fonts for certain kinds of source text
+my %font=(
+	  'standard'    => '\rm ', # source text
+	  'keyword'     => '\bf ', # language keywords
+	  'preprocessor'=> '\tt ', # C++ preprocessor keywords
+	  'comment'     => '\it ', # comments
+	  'string'      => '\sl ', # strings and characters
+	  'heredoc'     => '\sl ', # Perl multiline strings or "here-documents" ( <<EOF...EOF )
+	  'heredocterm' => '\bf ', # Perl multiline strings or "here-documents" ( <<EOF...EOF )
+	  'format'      => '\tt ', # Perl formats ( format XYZ = ... . )
+	  'regex'       => '\tt ', # Perl regular expressions
+	  'quotation'   => '\sl '  # Perl quotations
+	  );
+
+foreach (keys %font)
+{
+  $font{$_} = tag('X', protect($font{$_}));
+}
+
+# LaTeX font sizes
+my @fontsize=(qw(scriptsize footnotesize footnotesize small small normalsize normalsize large));
+
+foreach (@fontsize)
+{
+  $_ = tag('X', "\\".protect($_));
+}
+
+# various characters used to draw lines
+my %linesymbols=(
+		 '\-' => { 'width' => '1pt', 'raise' => '.5ex' }, 
+		 '\=' => { 'width' => '.5ex','raise' => '.5ex' }, 
+		 '\#' => { 'width' => '1ex', 'raise' => '0ex'  }, 
+		 '\~' => { 'width' => '1pt', 'raise' => '1.5ex'}, 
+		 '\_' => { 'width' => '1pt', 'raise' => '-.3ex'  }, 
+                );
+
+# keywords
+my @cppkeywords=(qw(auto double int struct break else long switch case enum register typedef char
+	            extern return union const float short unsigned continue for signed void default
+                    goto sizeof volatile do if static while template mutable
+                    new delete this operator class public protected private virtual friend 
+                    inline dynamic typeof all except exception raise raises reraise try asm catch 
+                    overload));
+
+foreach (@cppkeywords)
+{
+  $_ = tag('C', protect($_));
+}
+
+my @preprocessorkeywords=(qw(include define undef pragma ifdef endif ifndef elif if else error line));
+
+foreach (@preprocessorkeywords)
+{
+  $_ = tag('C', protect($_));
+}
+
+# What is a keyword in Perl?
+# In a script language, there is no unique answer to this question.
+# So feel free to alter the following list.
+my @perlkeywords=(qw(bless continue defined delete die do dump each else elsif 
+		     endif eof eval exec exists exit foreach fork format
+                     for goto import if index keys last local my next 
+		     package redo ref require return
+		     study tie tied undef unless untie use while
+		     x eq ne le ge lt gt cmp));
+
+foreach (@perlkeywords)
+{
+  $_ = tag('C', protect($_));
+}
+
+my %keywordpattern=('C++' => join('|', @cppkeywords),
+		    'preprocessor' => join('|', @preprocessorkeywords),
+		    'Perl' => join('|', @perlkeywords));
+
+# singleline comments
+my %slc=(
+          'C++' => 'M\/M\/', # pattern      
+          'C++X' => $font{'comment'}.tag('X', '$//$'),            # LaTeX
+          'C++(' => 'X{'.$font{'comment'}.tag('X', '\tiny$/\ast$}'), # opening LaTeX (multiline)
+          'C++)' => "X%X\nX{".$font{'comment'}.tag('X', '\tiny$\ast/$}'), # closing LaTeX (multiline)
+
+          'Perl' => 'M\#', # pattern
+          'PerlX' => $font{'comment'}.tag('X', '\\#'),          # LaTeX
+          'Perl(' => 'X{'.$font{'comment'}.tag('X', '\tiny\\#}'), # opening LaTeX (multiline)
+          'Perl)' => "X%X\nX{".$font{'comment'}.tag('X', '\tiny\\#}'), # closing LaTeX (multiline)
+        );
+
+# the biiiig LaTeX translation tables: C tagged -> untagged
+# one-character patterns
+my %tex0=
+(
+  'C~'  => '$\sim$', 'C\^' => '$\wedge$', 'C_'  => '\_',     'C&'  => '\&',      
+  'C%'  => '\%',     'C-'  => '$-$',      'C='  => '~$=$~',  'C>'  => '~$>$~',  
+  'C\<' => '~$<$~',  'C\|' => '$\mid$',   'C\[' => '$[$',    'C\]' => '$]$',    
+  'C\*' => '$\ast$', 'C\+' => '$+$',      'C\.' => '{\bf.}', 'C\/' => '$/$', 
+  'C\$' => '\$',     'C\#' => '\#',       "C\\\\" => '$\backslash$',
+  'C{'  => '\{',     'C}'  => '\}'
+);
+my $pat;
+foreach $pat (keys %tex0)
+{ 
+  $tex0{$pat} = tag('T', protect($tex0{$pat}));
+}
+
+# two-character patterns
+my %tex1=
+(
+  'C&C='   => '~\&=~',       'C%C='   => '~\%=~',  
+  'C:C:'   => '{\bf::}$\;$', 'C-C>'   => '$\rightarrow$', 
+  'C<C<'   => '$\ll$',       'C>C>'   => '$\gg$',
+  'C<C='   => '~$\leq$~',    'C>C='   => '~$\geq$~',
+  'C=C>'   => '~$\Rightarrow$~',
+  'C!C='   => '~$\neq$~',    'C^C='   => '~$\wedge=$~',
+  'C-C='   => '~$-\!=$~',    'C-C-'   => '$-\!-$',
+  'C=C='   => '~$==$~',      'C\/C='  => '~$/=$~',
+  'C\*C='  => '~$\ast\!=$~', 'C\|C='  => '~$\mid=$~',
+  'C\+C='  => '~$+\!=$~',    'C\|C\|' => '~$\mid\mid$~',
+  'C\+C\+' => '$+\!+$',      'C\.C\*' => '.$\ast$'
+);
+foreach $pat (keys %tex1)
+{
+  $tex1{$pat} = tag('T', protect($tex1{$pat}));
+}
+
+# longer patterns
+my %tex2= 
+(
+  'C<C<C='    => '~$\ll=$~',
+  'C>C>C='    => '~$\gg=$~',
+  'C-C>C\*'   => '$\rightarrow\!\!\ast$',
+  'C\.C\.C\.' => '$\ldots$'
+); 
+foreach $pat (keys %tex2)
+{
+  $tex2{$pat} = tag('T', protect($tex2{$pat}));
+}
+
+# LaTeX special symbols
+my @longsymbols = (qw(alpha beta gamma delta epsilon zeta theta iota kappa lambda
+		      sigma omega Gamma Delta Theta Lambda Sigma Upsilon Omega
+		      infty nabla hbar));
+foreach (@longsymbols)
+{
+  $_ = protect($_);
+}
+
+my @shortsymbols = (qw(mu nu xi pi eta rho tau phi chi psi Xi Pi Phi Psi));
+foreach (@shortsymbols)
+{
+  $_ = protect($_);
+}
+
+#\subsection{LaTeX header}
+print "printing LaTeX header...\n" unless($option{'quiet'});
+
+open(TEX, '>'.$option{'listing'}.'.tex') 
+     || die 'Cannot open file '.$option{'listing'}.'.tex for writing\n';
+
+print TEX "\\documentclass[".$option{'styles'}."]{article}\n";
+my @packages=split(',', $option{'packages'});
+foreach (@packages)
+{
+    print TEX "\\usepackage{".$_."}\n";
+}
+
+print TEX "\\makeindex\n" if($option{'index'});
+print TEX "\\batchmode\n" if($option{'quiet'});
+print TEX <<EOF;
+% macros you can use in the LaTeX verbatim parts of your C++/Perl file
+% (comments of the kind //tex, //\... and /*tex...*/ in C++
+%  resp. #tex... and #\... in Perl)
+EOF
+
+print TEX "\\newcommand{\\ix}[1]{#1";
+print TEX "\\protect\\index{#1}" if($option{'index'});
+print TEX "}\n";
+
+print TEX <<EOF;
+\\newcommand{\\pg}[1]{#1 (page \\protect\\pageref{#1})}
+\\newcommand{\\PG}[1]{page \\protect\\pageref{#1}}
+\\newcommand{\\dd}[2]{{\\partial {#1} \\over \\partial {#2}}}
+\\newcommand{\\D}{\\displaystyle}
+\\newcommand{\\underscore}{\\_}
+\\mathindent0mm
+\\oddsidemargin-1mm
+\\evensidemargin-6mm 
+\\textwidth17cm
+\\topmargin-1cm
+\\textheight25cm
+\\setcounter{secnumdepth}{3}
+\\setcounter{tocdepth}{3}
+\\newlength{\\indentation}
+\\newcommand{\\blank}{\\hspace*{1\\indentation}}
+
+% this is for pod2latex
+\\def\\C++{{\\rm C\\kern-.05em\\raise.3ex\\hbox{\\footnotesize ++}}}
+\\def\\underscore{\\leavevmode\\kern.04em\\vbox{\\hrule width 0.4em height 0.3pt}}
+\\parindent0mm
+% end of pod2latex header
+EOF
+
+if($option{'begin'} && -r $option{'begin'})
+{
+  print 'including file '.$option{'begin'}."...\n" unless($option{'quiet'});
+  print TEX `cat $option{'begin'}`."\n";
+}
+else
+{
+  print TEX '\begin{document}'."\n";
+}
+
+if($option{'toc'})
+{
+  print TEX "\\pagestyle{headings}\n\\pagenumbering{roman}\n"
+            .'{'.unprotect(untag($font{'comment'})).'\tiny$/\ast$}'
+	    ."\n\\tableofcontents\n"
+            .'{'.unprotect(untag($font{'comment'})).'\tiny$\ast/$}'
+            ."\\pagenumbering{arabic}\n";
+}
+
+print TEX <<EOF;
+\\newpage
+\\setlength{\\indentation}{0.25em}
+\\begin{flushleft}
+\\hyphenpenalty=10000
+EOF
+
+# this causes a <> to slurp in a whole C++/Perl input file
+$/=undef;
+
+# this causes the output buffer to be 1 character long, i.e. output is printed fast.
+$|=1;
+
+# first file flag
+my $firstfile=1;
+
+#\subsection{The Conversion Process}
+# read file by file
+while(@ARGV)
+{
+  my $filename = $ARGV[0];
+  print "converting file ".$filename."... " unless($option{'quiet'});
+  my $raw=<>; # read file
+
+  # remove leading and trailing empty lines. remove trailing whitespace in each line
+  $raw =~ s/^(\s|\n)*//; 
+  $raw =~ s/(\s|\n)*$//; 
+  $raw =~ s/[ \t]*\n/\n/g; 
+  $raw="\n".$raw."\n\n"; # add newlines at TOF and EOF
+
+  #\subsubsection{Determine File Type (C++ or Perl)}
+  # if file starts with #! (after whitespace), it is assumed to be Perl, otherwise C++.
+  my $lang='C++';
+  $lang='Perl' if($raw =~ /^(\s|\n)*\#!/);
+  print "looks like ".$lang."..."."\n" unless($option{'quiet'});
+  
+  # replace tabs by the appropriate number of spaces (tab stops every 8 characters)
+  1 while($raw =~ s/\n([^\t\n]*)\t/"\n".$1.(' ' x (8-(length($1)%8)))/egx);
+
+  #\subsubsection{Insert Tag Protector Strings and Tag the Whole File}
+
+  #tex\bf Beware: hairy pattern matching going on here!
+
+  # possible tags in source: none
+  # affected tags: CMX
+  print "tagging" unless($option{'quiet'});
+  $raw = protect($raw);
+  print "." unless($option{'quiet'});
+
+  # in the initial tagging process, we traverse the entire file character by character,
+  # immediately detecting...
+  #   for the C++ case: asterisk (/* */) and double-slash (//) comments and strings ("" and '')
+  #   for the Perl case: number comments (#), strings ("", '', ``, qc..c, <<EOF...EOF),
+  #                      and regular expressions
+  # and tagging these parts of the source code as 'M'. The rest of the source code is tagged as 'C'.
+  my $rawlen=length($raw);
+  my $source='';
+  my $count=0;
+
+  if($lang eq 'C++')
+  {
+    # traverse raw file bytewise
+    my $position=0;
+    my $thousands=0;
+    while($position<$rawlen) 
+    {
+      if($position > 1000*$thousands)
+      {
+         print "." unless($option{'quiet'});
+         $thousands++;
+      }
+      if(substr($raw, $position, 2) eq '/*')
+      {
+	if(substr($raw, $position, -1) =~ /^(\/\* .*? \*\/)/sx)
+	{
+	  # asterisk comments (/* */)
+	  my $comment = $1; 
+	  $position += length($comment);
+	  $source .= tag('M', $comment);
+        }
+	else
+	{
+          print "\nstrange... $filename seems to end within an asterisk comment." 
+	      unless($option{'quiet'});
+	  $source .= tag('M', substr($raw, $position, -1));
+	  $position = $rawlen;
+	}
+        next;
+      }
+      elsif(substr($raw, $position, 2) eq '//')
+      {
+	if(substr($raw, $position, -1) =~ /^(\/\/.*(\n\s*\/\/cont.*)*\n)/)
+	{
+	   # double-slash comments (//).
+	   # continuation lines (//cont) are directly appended to the previous line.
+	   my $comment = $1; 
+	   $position += length($comment);
+	   $comment =~ s/\n\s*\/\/cont//g; # remove continuation markers
+	   $source .= tag('M', $comment);
+	}
+	else
+	{
+	   print "\nstrange... $filename seems to end within a double-slash comment line." 
+	       unless($option{'quiet'});
+	   $source .= tag('M', substr($raw, $position, -1));
+	   $position = $rawlen;
+	}
+        next;
+      }
+      elsif(substr($raw, $position, 1) =~ /['"]/)
+      {
+        # For strings, we insert the font specification right away
+        if(substr($raw, $position, -1) =~ /^(\'([^\\']|\\.)*?\' | \"([^\\"]|\\.)*?\")/x)
+        {
+           # strings and characters
+	   my $string = $1; 
+	   $position += length($string);
+	   $source .= tag('X', '{'.$font{'string'}).tag('S', $string).'X}';
+        }
+        else
+        {
+	   print "\nstrange... $filename seems to end within a string constant." unless($option{'quiet'});
+	   $source .= tag('X', '{'.$font{'string'}).tag('S', substr($raw, $position, -1)).'X}';
+	   $position = $rawlen;
+        }
+        next;
+      }  
+      $source .= 'C'.substr($raw, $position, 1);
+      $position++;
+    }
+  }
+  elsif($lang eq 'Perl')
+  {
+    # sorry, the complicated syntax of here-documents makes this program somewhat complex
+    # formats are treated like here-documents with the special terminator string "."
+    my $heredocterm=''; # open here-documents (multiline strings of the kind <<EOF ... EOF)
+    my @pendingheredoc=(); # here-documents starting after this line
+
+    # traverse raw file bytewise
+    my $position=0;
+    my $thousands=0;
+    while($position<$rawlen) 
+    {
+      if($position > 1000*$thousands)
+      {
+         print "." unless($option{'quiet'});
+         $thousands++;
+      }
+
+      if($heredocterm) 
+      {
+        # we are in the middle of a here-document or format
+        if(substr($raw, $position, 1) eq "\n" && substr($raw, $position, -1) =~ /^(\n\s*$heredocterm\s*)\n/)
+        {
+          # terminator of the running here-document has been found
+          $position += length($1);
+          if($heredocterm ne '\.')
+          {
+            $source .= "X}S\n".tag('X', '{'.$font{'heredocterm'}.$heredocterm.'}'); # true here-doc
+          }
+          else
+          {
+            $source .= "S\nX.X}"; # format         
+          }
+          $heredocterm = '';
+          next;
+        }
+        $source .= 'S'.substr($raw, $position, 1);
+        $position++;
+        next;
+      }
+      elsif(@pendingheredoc && substr($raw, $position, 1) eq "\n")
+      {
+        # pending here-document starts after this newline
+        $heredocterm = shift(@pendingheredoc);
+        if($heredocterm ne '\.')
+        {
+          $source .= "C\n".tag('X', '{'.$font{'heredoc'}); # true here-doc
+        }
+        else
+        {
+          $source .= "C\n".tag('X', '{'.$font{'format'}); # format
+        }
+        $position++;
+        next;
+      }
+      elsif(substr($raw, $position, 2) eq '<<')
+      {
+        # possibly indicator of a here-document (multiline string of the style <<EOF...EOF)
+	# starting on the next line?
+        # The syntax we detect is quite general: even
+        #   print <<THIS." are ".<<'THAT';
+        #   You
+        #   THIS
+        #   the user.
+        #   THAT
+        # works!
+	if(substr($raw, $position, -1) =~ /^(<<['"]?)([a-zA-Z_0-9]*)(['"]?)/) 
+        {
+          my $start = $1;
+          my $terminator = $2;
+          my $end = $3;
+
+          $source .= tag('S', $start).tag('X', '{'.$font{'heredocterm'}.$terminator.'}').$end;
+          $position += length($start)+length($terminator);
+          $position += length($end) if($end);
+
+          # We now try to find all the heredoc terminators. 
+          # We build a pattern that looks for them all...
+          my $terminatorpattern = '';
+          foreach (@pendingheredoc)
+          {
+            $terminatorpattern .= '(.|\n)*?\n\s*'.$_.'\s*\n';
+          }
+          $terminatorpattern .= '(.|\n)*?\n\s*'.$terminator.'\s*\n';
+
+          # if that pattern matches, ok.
+          if(substr($raw, $position, -1) =~ /^$terminatorpattern/x)
+          {
+            push(@pendingheredoc, $terminator); # here-document will start on next line
+            next;
+          }
+        }
+      }
+
+      if(substr($raw, $position, 6) eq 'format')
+      {
+        if(substr($source,-1,1) !~ /[a-zA-Z0-9_]/ &&
+           substr($raw, $position, -1) =~ /format\s+[A-Za-z_0-9]+.*?=(.|\n)*?\n\s*\.\s*\n/)
+        {
+          $source .= tag('C', 'format');
+          $position += 6;
+          push(@pendingheredoc, '\.');
+          next;
+        }        
+      }
+
+      if(substr($raw, $position, 2) eq "\n=")
+      {
+	if(substr($raw, $position, -1) =~ /^(\n\=(head|item|over|pod|for|begin|end).*?(.*\n)*?\=cut.*)/)
+        {
+          my $pod=$1;
+          $position += length($pod);
+
+          # Perl POD found. Put in a POD file.
+          open(POD, ">$option{'listing'}pod.pod");
+          print POD unprotect($pod)."\n";
+          close POD;
+         
+          # run pod2latex
+          print "\nPOD documentation found, running pod2latex...";
+          system "pod2latex $option{'listing'}pod.pod";
+
+          # read in the result
+          open(POD, "<$option{'listing'}pod.tex");
+          my $latex=<POD>;
+          close POD;
+
+          unless($option{'preservepod'})
+          {
+            # cut off the pod2latex-generated leading \section command.
+            # The header ends with an index command and an empty line.
+            $latex =~ s/^.*?\\index[^\n]*\n\s*\n//s;
+
+            # downgrade \subsections and \subsubsections to \subsubsections and \paragraphs
+            $latex =~ s/\\subsubsection/\\paragraph/g;
+            $latex =~ s/\\subsection/\\subsubsection/g;
+
+            # add a \subsection command if desired
+            $latex = '\subsection{Perl Documentation (POD)}'."\n".$latex if($option{'sections'});
+          }
+
+          $source .= "X%X\n".tag('X', protect($latex))."X%X\n";
+
+          print "\ncontinue tagging";
+        }
+      }
+
+      if(substr($raw, $position, 1) eq '#')
+      {
+	if(substr($raw, $position, -1) =~ /^(\#.*(\n\s*\#cont.*)*\n)/)
+	{
+          # number comments (#).
+          # continuation lines (#cont) are directly appended to the previous line.
+	  my $comment = $1; 
+	  $position += length($comment);
+          $comment =~ s/\n\s*\#cont//g; # remove continuation markers
+	  $source .= tag('M', $comment);
+	}
+	else
+	{
+	   print "\nstrange... $filename seems to end within a comment line." unless($option{'quiet'});
+	   $source .= tag('M', substr($raw, $position, -1));
+	   $position = $rawlen;
+	}
+        next;
+      }
+      elsif(substr($raw, $position, 1) =~ /['"`]/)
+      {
+        # For strings, we insert the font specification right away
+	if(substr($raw, $position, -1) =~ /^(\'([^\\']|\\.)*?\' | \"([^\\"]|\\.)*?\" | \`([^\\`]|\\.)*?\`)/x)
+        {
+           # simple strings and characters ("", '', ``)
+	   my $string = $1; 
+	   $position += length($string);
+	   $source .= tag('X', '{'.$font{'string'}).tag('S', $string).'X}';
+        }
+        else
+        {
+	   print "\nstrange... $filename seems to end within a string constant." unless($option{'quiet'});
+	   $source .= tag('X', '{'.$font{'string'}).tag('S', substr($raw, $position, -1)).'X}';
+	   $position = $rawlen;
+        }
+        next;
+      }  
+      elsif(substr($raw, $position, 2) =~ /^(\/|m|s|tr)/) # possibly a regular expression?
+      {
+	unless(substr($source,-1,1) =~ /[a-zA-Z0-9_]/)
+	{
+	  my $regex=detectregex(substr($raw, $position, -1)); 
+
+	  if($regex)
+	  {
+            # For regexes, we also insert the font specification here
+            $position += length($regex);
+            $source .= tag('X', '{'.$font{'regex'}).tag('S', $regex).'X}';
+            next;
+	  }
+        }
+      }
+      
+      if(substr($raw, $position, 1) eq 'q') # possibly a quotation? (q, qq, qx, qw)
+      {
+	unless(substr($source,-1,1) =~ /[a-zA-Z0-9_]/)
+	{
+	  my $quote=detectquotation(substr($raw, $position, -1)); 
+	  if($quote)
+	  {
+            # quotations also get their font here
+	    $position += length($quote);
+            $source .= tag('X', '{'.$font{'quotation'}).tag('S', $quote).'X}';
+            next;
+	  }
+	}
+      }
+      
+      if(substr($raw, $position, 2) =~ /\$['`#\/\\"\$<>\(\)\[\]]/)
+      {
+	# prevent operator $# and various special variables to be misunderstood
+	$source .= tag('C', substr($raw, $position, 2));
+	$position += 2;
+        next;
+      }
+      
+      $source .= 'C'.substr($raw, $position, 1);
+      $position++;
+    }
+  }
+  print "\n" unless($option{'quiet'});
+
+  # check tagging
+  die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+
+  # produce the LaTeX section command
+  my $shortname = $filename;
+  $shortname =~ s/^$ENV{'HOME'}\///;
+  my $sec = $slc{$lang.'('}."M\n".tag('X', "\\section{").tag('M', $shortname)."X%X\nX}X\n"
+            .$slc{$lang.')'}."M\n";
+  $source=$sec.$source if($option{'sections'});
+
+  # produce the LaTeX clearpage command
+  $source=tag('X', "\\clearpage\n").$source if(! $firstfile && $option{'formfeeds'});
+  $firstfile=0;
+  
+  #\subsubsection{Multiline Comments}
+  # possible tags in source: CMXS
+  # affected tags: MX
+  if($lang eq 'C++')
+  {
+    print "converting multiline comments...\n" unless($option{'quiet'});
+
+    # LaTeX command of the form '/*tex \copyright some latex here */' (multiline possible)
+    # -> /* \copyright some latex here */
+    # continuation of LaTeX text until */ is found
+    my $start = 'X{F_'.tag('X', $font{'comment'}.'$/\ast$');
+    my $end = tag('X', "%\n".'$\ast/$}').'F^';
+    $source =~ s/M\/M\*MtMeMx ((M.)*?) M\*M\//$start.tag('X', $1).$end/segx;
+
+    # check tagging
+    die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+  
+    # Plain comment of the form '/* simple ASCII text */' (multiline possible)
+    $start = 'X{F_'.tag('X', $font{'comment'}.'$/\ast$');
+    $end = tag('X', '$\ast/$}').'F^';
+    $source =~ s/M\/M\* ((M.)*?) M\*M\//$start.$1.$end/segx;
+
+    # check tagging
+    die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+  }
+
+  #\subsubsection{Single-Line Comments}
+  # possible tags in source: CXMFS
+  # affected tags: M
+  print "converting single-line comments...\n" unless($option{'quiet'});
+
+  # LaTeX command of the form '//\section{...}' (at the end of the line)
+  # continuation lines are then possible with ' //cont \some\more\latex' (on a single line)
+  # -> /* 
+  #    \section{...} \some\more\latex
+  #    */
+  # For Perl: analogously with a # instead of a /* or */
+  my $start = $slc{$lang.'('}."X{M\n";
+  my $end = "X%X\nX}".$slc{$lang.')'}."M\n";
+  $source =~ s/$slc{$lang} (M\\(M.)*) M\n/$start.tag('X', $1).$end/egx;
+
+  # check tagging
+  die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+  
+  # LaTeX command of the form '//tex \some\latex\here'
+  # continuation lines are then possible with ' //cont\some\more\latex' (on a single line)
+  # -> // \some\latex\here\some\more\latex
+  # For Perl: analogously with a # instead of a //
+  $start = 'X{F_'.$slc{$lang.'X'};
+  $source =~ s/$slc{$lang}MtMeMx ((M.)*) M\n/$start.tag('X', $1)."X%X\nX}F^M\n"/egx;
+
+  # check tagging
+  die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+  
+  # Plain comment of the form '// simple ASCII'
+  # continuation lines are then possible with ' //cont text suffices' (on a single line)
+  # -> // simple ASCII text suffices
+  # For Perl: analogously with a # instead of a //
+  $start = 'X{F_'.$slc{$lang.'X'};
+  $source =~ s/$slc{$lang}((M.)*)M\n/$start.$1."X}F^M\n"/egx;
+
+  # check tagging
+  die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+  
+  #\subsubsection{Convert Whitespace (Spaces and Newlines)}
+  # tabs have been treated already (immediately after reading the file, see above)
+  # possible tags in source: CXMFS
+  # affected tags: CMSW
+  print "converting whitespace and line symbols (~-=#_)...\n" unless($option{'quiet'});
+
+  # replace newlines by \mbox{}\\, with leading and trailing newline indicators
+  my $newline=tag('X', "%\n\\mbox{}\\\\%\n");
+  $source =~ s/[CMWS]\n/$newline/g;
+
+  # replace formfeeds by \newpage, with leading and trailing newline indicators
+  my $formfeed=tag('X', "%\n\\newpage\n");
+  $source =~ s/[CMWS]\014/$formfeed/g;
+
+  # replace consecutive spaces by indentation
+  $source =~ s/(([CMWS]\s){3,})/tag('X', '\hspace*{'.length($1).'\indentation}')/egx;
+
+  # replace single spaces by the blank command
+  my $blank = tag('X', '\blank');
+  $source =~ s|(([CMWS]\s)+)|($blank x int(length($1)/2)).'X '|egx;
+
+  # replace a consecutive series of any of the "line-type" characters -_=#~
+  # by an appropriate rule command  
+  my $linesymbol;
+  foreach $linesymbol (keys %linesymbols)
+  {
+    my $start = tag('X', '\rule['.$linesymbols{$linesymbol}{'raise'}.']{');
+    my $end = tag('X', '\indentation}{'.$linesymbols{$linesymbol}{'width'}.'}');
+    $source =~ s/(([CMWS]$linesymbol){3,})/$start.tag('X', length($1)).$end/egx;
+  }
+
+  die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+  
+  #\subsubsection{Treat Keywords}
+  # possible tags in source: CXWMFS
+  # affected tags: C
+  
+  # preprocessor keywords
+  if($lang eq 'C++')
+  { 
+    print "converting preprocessor keywords...\n" unless($option{'quiet'});
+    my $ft = $font{'preprocessor'};
+    my $kwpat = $keywordpattern{'preprocessor'};
+
+    $start = tag('X', '{'.$font{'preprocessor'}.'\#');
+    $source =~ s/C\# ($kwpat) (.[^a-zA-Z])/$start.tag('X', $1)."X}F^X\n".$2/egx;
+
+    die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+  }
+
+  # language keywords
+  print "converting $lang keywords...\n" unless($option{'quiet'});
+  my $ft = $font{'keyword'};
+  my $kwpat = $keywordpattern{$lang};
+
+  $start = tag('X', '{'.$font{'keyword'});
+  $source =~ s/(.[^a-zA-Z])($kwpat)(.[^a-zA-Z])/$1.$start.$2.'X}'.$3/egx;
+
+  # check tagging
+  die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+
+  #\subsubsection{Treat Identifiers}
+  # possible tags in source: CXWMFS
+  # affected tags: CMS
+  if($option{'references'} || $option{'index'})
+  {
+      print "generating " unless($option{'quiet'});
+      print "index and " unless($option{'quiet'} || ! $option{'index'});
+      print "label " unless($option{'quiet'} || ! $option{'references'});
+      print "commands" unless($option{'quiet'});
+
+      # single identifier.
+      my $sourceident='C[A-Za-z_] (C[A-Za-z_0-9dot])*'; # dot is later replaced by '' or '.'
+
+      # C++ class/template identifier
+      my $sourceclassident = $sourceident;
+      $sourceclassident .= '(C<'.$sourceident.'C>)?' if($lang eq 'c++'); # templates
+
+      # general C++ operator pattern
+      my $sourceoperat='CoCpCeCrCaCtCoCr (C\s)* ('
+	  .'(C[-+*/%&!<>=^\|~] | C<C< | C>C>) (C=)? |' # assignment operators
+	  .'(C\+C\+ | C\|C\| | C&C& | C-C- | C\(C\) | C\[C\] | CnCeCw | CdCeClCeCtCe)' # other ops
+          .'| (CcCoCnCsCt\s*)? '.$sourceclassident.'[&*\s]*)'; # casts
+
+      # Valid C++/Perl identifier or 'operator'+(C++ operator) pattern
+      my $sourceidentop = $sourceident;
+      $sourceidentop .= '|'.$sourceoperat if($lang eq 'C++');
+ 
+      # most general C++ identifier: matches things like
+      #   x, a_2, ::delete, myClass::sprintf, myClass::operator []
+      my $sourceidentifier = '(('.$sourceclassident.')?(C\s)*C:C:(C\s)*)?';
+      $sourceidentifier .= '('.$sourceidentop.')';
+      $sourceidentifier .= $sourceident; # no operator overloading in Perl
+
+      # identifiers in comments and strings are also put in the index
+      # dots allowed as part of an identifier in comments and strings to include filenames
+      my $comidentifier = $sourceidentifier;
+      $comidentifier =~ s/C/M/g;
+      $comidentifier =~ s/dot/./; 
+      my $stridentifier = $sourceidentifier;
+      $stridentifier =~ s/C/S/g;
+      $stridentifier =~ s/dot/./;
+
+      $sourceidentifier =~ s/dot//; # no dots allowed as part of an identifier
+      
+      # convert
+      my %known=();
+      my $source1='';
+      while($source =~ /($sourceidentifier|$comidentifier|$stridentifier)/x)
+      {
+	  my $ident=untag($1);
+	  $source = $POSTMATCH;
+
+	  if(exists $known{$ident})
+	  {
+	      $source1 .= $PREMATCH.$known{$ident};
+	  }
+	  else
+	  {
+	      # first occurrence: add a \label statement
+	      if(length($ident)>6 && $option{'index'})
+	      {
+		  $known{$ident}=tag('X', '\ix{').tag('I', $ident).'X}';
+		  $source1 .= $PREMATCH.$known{$ident}; 
+		  $source1 .= tag('X', '\label{'.$ident.'}') if($ident =~ /^$sourceidentifier$/);
+	      }
+	      else
+	      {
+		  $known{$ident}=tag('I', $ident);
+		  $source1 .= $PREMATCH.$known{$ident};
+	      }
+	  }
+	  print "." if(($count++) % 100==0 && ! $option{'quiet'});
+      }
+      $source = $source1.$source;
+      print "\n" unless($option{'quiet'});
+
+      # check tagging
+      die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+  }
+
+  # add font control to braces
+  $source =~ s/C{/C{F_/g;
+  $source =~ s/C}/C}F^/g;
+
+  # now we don´t need any difference between the C, M, S, and I tags anymore
+  $source =~ s/[MIS]/C/g;
+
+  #\subsubsection{Special Character Sequences}
+  # possible tags in source: CXWF
+  # affected tags: C
+  print "converting special character sequences" unless($option{'quiet'});
+
+  foreach $pat (keys %tex2) 
+  {
+    $source =~ s/$pat/$tex2{$pat}/g;
+    print "." unless($option{'quiet'});
+  }
+
+  # check tagging
+  die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+ 
+  foreach $pat (keys %tex1)
+  {
+    $source =~ s/$pat/$tex1{$pat}/g;
+    print "." unless($option{'quiet'});
+  }
+
+  # check tagging
+  die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+
+  foreach $pat (keys %tex0)
+  {
+    $source =~ s/$pat/$tex0{$pat}/g;
+    print "." unless($option{'quiet'});
+  }
+  print "\n" unless($option{'quiet'});
+
+  # check tagging
+  die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+
+  #\subsubsection{Special LaTeX Symbols}
+  # possible tags in source: CXWTF
+  # affected tags: C
+  if($option{'symbols'})
+  {
+    print "converting special LaTeX symbols" unless($option{'quiet'});
+
+    # long symbol tokens: will be replaced by the appropriate LaTeX symbol
+    my $sym;
+    foreach $sym (@longsymbols)
+    {
+      my $rep=tag('T', "\$\\".$sym."\$");
+      $pat=tag('C', $sym);
+
+      $source =~ s/$pat/$rep/g;
+      print "." unless($option{'quiet'});
+    }
+
+    # check tagging
+    die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+  
+    # short symbol tokens: will be replaced unless they are part of a longer word 
+    # (but: underscore counts as separator!) 
+    foreach $sym (@shortsymbols)
+    {
+      my $rep=tag('T', "\$\\".$sym."\$");
+      $pat=tag('C', $sym);
+
+      $source =~ s/(.[^a-zA-Z_])$pat(.[^a-zA-Z_])/$1$rep$2/g;
+      print "." unless($option{'quiet'});
+    }
+    print "\n" unless($option{'quiet'});
+  }
+
+  # check tagging
+  die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+  
+  #\subsubsection{Adjusting Font Sizes}
+  # possible tags in source: CXWTF
+  # affected tags: F
+  print "adjusting font sizes...\n" unless($option{'quiet'});
+  my $size = $#fontsize;
+  my $source1=tag('X', $fontsize[$size].$font{'standard'});
+  while($source =~ /F([_^])/)
+  {
+    $source = $POSTMATCH;
+   
+    $size++ if($1 eq '^');
+    $size-- if($1 eq '_');
+
+    my $actualsize = $size;
+    $actualsize = $#fontsize if($actualsize>$#fontsize);
+    $actualsize=0 if($actualsize<0);
+
+    $source1 .= $PREMATCH.tag('X', $fontsize[$actualsize].$font{'standard'});
+  }
+  $source = $source1.$source;
+
+  #\subsubsection{Untag the File}
+  print "untagging...\n" unless($option{'quiet'});
+  $source=unprotect(untag($source));
+
+  #\subsubsection{Print LaTeX File}
+  print "producing LaTeX...\n" unless($option{'quiet'});
+
+  print TEX $source;
+}
+
+#\subsection{Adding the Trailer and Running LaTeX/xdvi/dvips/psnup}
+print "adding LaTeX trailer...\n" unless($option{'quiet'});
+print TEX "\\end{flushleft}\n";
+print TEX "\\printindex\n" if($option{'index'});
+print TEX "\\end{document}\n";
+
+close(TEX);
+
+if($option{'latex'}) 
+{
+    my $quiet = ($option{'quiet'} ? ' >/dev/null 2>&1' : '');
+    print "running LaTeX...\n" unless($option{'quiet'});
+    my $listing = $option{'listing'};
+    my $dir = $listing;
+    $dir =~ s|^(.*)/[^/]*$|$1|;
+    $listing =~ s|^.*/([^/]*)$|$1|;
+  
+    chdir($dir) if($dir);
+
+    system 'latex '.$listing.$quiet;
+    system 'makeindex '.$listing.$quiet if($option{'index'});
+    system 'latex '.$listing.$quiet if($option{'index'} || $option{'references'} || $option{'toc'});
+    system "rm -f $listing.aux $listing.log $listing.ind $listing.ilg $listing.idx $listing.toc";
+    system "rm -f ".$listing."pod.pod ".$listing."pod.tex";
+    system "xdvi $listing.dvi &".$quiet if($option{'xdvi'});
+  
+    $quiet = ($option{'quiet'} ? ' 2>/dev/null' : '');
+    system "dvips -f <$listing.dvi $quiet | tee ".$listing."1.ps | psnup -2 >$listing.ps $quiet";
+    system $option{'print'}.' '.$listing.'1.ps' if($option{'print'});
+    system $option{'print2'}.' '.$listing.'.ps' if($option{'print2'});
+}
+
+print "done listing.\n" unless($option{'quiet'});
+exit;
+
+#\subsection{Subroutines for Tagging and De-Tagging}
+# tag protection
+sub protect
+{
+    my $string = shift;
+    foreach (@tags)
+    {
+	$tagprotector{$_}='capital'.lc($_).'letter';
+	die "Internal error: tag protector string occurring in source.\n" 
+	    if($string =~ /$tagprotector{$_}/);
+	$string =~ s/$_/$tagprotector{$_}/g;
+    }
+    return $string;
+}
+
+sub unprotect
+{
+    my $string = shift;
+    foreach (@tags)
+    {
+	$string =~ s/$tagprotector{$_}/$_/g;
+    }
+    return $string;
+}
+
+# tag a text: insert a capital letter before each character
+sub tag
+{
+    my $tagchar = shift;
+    my $string = shift;
+    $string =~ s/$tag//g;
+    $string =~ s/(.)/$tagchar$1/sg;
+    return $string;
+}
+
+sub Mretag
+{
+    my $string = shift;
+    $string =~ s/[CW](.)/M$1/sg;
+    return $string;
+}
+
+# untag the text: remove all capital letters
+sub untag
+{
+    my $string = shift;
+    $string =~ s/$tag//g;
+    return $string;
+}
+
+#\subsection{Subroutines for Regular Expression/Quotation Detection}
+# detect a regular expression in Perl source code.
+sub detectregex
+{
+    $_ = shift;
+
+    my $inner='(\\\\. | [^\\\\\\/[\n] | \[ (\^ \])? ([^\]] | \\\\ \])* \] )+ \/';
+    my $multiinner='(\\\\. | [^\\\\\\/[\#] | \#.*\n | \[ (\^ \])? ([^\]] | \\\\ \])* \] )+ \/';
+
+    # multi/single-line /A/x, s/A/B/x and the like
+    return $1 if(/^(\/ ($multiinner) [gimose]*x[gimose]*)/x);
+    return $1 if(/^(\/ ($inner) [gimose]*)/x);
+
+    my @brackets=('{}', '()', '[]', '<>'); # detected bracket types
+    foreach (@brackets)
+    {
+      my $left='\\'.$_;
+      my $right='\\'.chop($left);
+
+      $inner = $left.'(\\\\. | [^'.$right.'\\\\[\n] | \[ (\^ \])? ([^\]] | \\\\ \])* \])+ '.$right;
+      $multiinner = $left.'(\\\\. | [^'.$right.'\\\\[\#] | \#.*\n | \[ (\^ \])? ([^\]] | \\\\ \])* \])+ '
+	          .$right;
+
+      # multi/single-line s{A}{B}x and the like
+      return $1 if(/^(m($multiinner)[gimose]*x[gimose]*)/x);
+      return $1 if(/^(m($inner)[gimose]*)/x);
+      return $1 if(/^((s|tr)($multiinner){2}[gimose]*x[gimose]*)/x);
+      return $1 if(/^((s|tr)($inner){2}[gimose]*)/x);
+    }
+ 
+    my @delimiters=('\/', '\|', '\@', '\&', '\!');   # detected delimiters
+    my $del;
+    foreach $del (@delimiters)
+    {
+      $inner='(\\\\. | [^'.$del.'\\\\[\#] | \#.*\n | \[ (\^ \])? ([^\]] | \\\\ \])* \] )+ '.$del;
+      $multiinner='(\\\\. | [^'.$del.'\\\\[\#] | \#.*\n | \[ (\^ \])? ([^\]] | \\\\ \])* \] )+ '.$del;
+
+      # multi/single-line s@A@x, s/A/B/x and the like
+      return $1 if(/^(m$del($multiinner)[gimos]*x[gimos]*)/x);
+      return $1	if(/^(m$del($inner)[gimosx]*)/x);
+
+      return $1	if(/^((s|tr)$del($multiinner){2}[gimos]*x[gimos]*)/x);
+      return $1 if(/^((s|tr)$del($inner){2}[gimosx]*)/x);
+    }
+
+    return '';
+}
+
+# detect a quotation (q, qq, qx, qw)
+sub detectquotation
+{
+    $_ = shift;
+    return $1 if(/^((qq|qx|qw|q) \( (\\. | [^\)\\])* \))/x);
+    return $1 if(/^((qq|qx|qw|q) \[ (\\. | [^\]\\])* \])/x);
+    return $1 if(/^((qq|qx|qw|q) \{ (\\. | [^\}\\])* \})/x);
+    return $1 if(/^((qq|qx|qw|q) \< (\\. | [^\>\\])* \>)/x);
+    return $1 if(/^((qq|qx|qw|q) \/ (\\. | [^\/\\])* \/)/x);
+    return $1 if(/^((qq|qx|qw|q) \| (\\. | [^\|\\])* \|)/x);
+    return $1 if(/^((qq|qx|qw|q) \@ (\\. | [^\@\\])* \@)/x);
+    return $1 if(/^((qq|qx|qw|q) \& (\\. | [^\&\\])* \&)/x);
+    return $1 if(/^((qq|qx|qw|q) \! (\\. | [^\!\\])* \!)/x);
+    return '';
+}
+
+#\subsection{POD (Plain Old Documentation)}
+
+=head1 NAME
+
+listing - C++ / Perl to LaTeX converter
+
+=head1 SYNOPSIS
+
+B<listing> I<options> I<filenames>
+
+where I<filenames> is a sequence of C++ or Perl files (mixing allowed).
+
+=head1 DESCRIPTION
+
+B<listing> converts the files to a single LaTeX file listing.tex and runs latex, dvips and psnup on it.
+The results are a DVI file listing.dvi, a Postscript file listing1.ps (1 page/sheet), and a Postscript
+file listing.ps (2 pages/sheet). 
+
+=over 8
+
+=item o
+
+Keywords, C++ preprocessor commands, strings and comments are typeset in different fonts.
+
+=item o
+
+Font size varies with nesting level ({...}).
+
+=item o
+
+LaTeX verbatim comments in the styles /*tex...*/, //tex..., //\section...  
+(resp for Perl #tex... etc) allow you to embed pictures and formulas in your comments.
+
+=item o
+
+A table of contents (TOC) is produced.
+
+=item o
+
+Identifiers can be collected in an index. (option --index)
+For the first occurrence of each identifier, a \label- command can be generated, 
+so you can use \pageref in your LaTeX comments to refer to definitions. (option --references)
+
+=item o
+
+Perl POD inline documentation is automatically run through pod2latex and included in the 
+resulting LaTeX file.
+
+=back
+
+=head1 OPTIONS
+
+=over 8
+
+B<listing> is highly configurable, taking options from the command line as well as the environment
+variable B<LISTING>. Valid options are listed in the following.  For each option, both the short and
+long form are given. 
+
+=item -v --version 
+
+prints the version number and exits.
+
+=item -b --begin <header> 
+
+includes the file <header> at the place where otherwise the LaTeX-command \begin{document} would stand. 
+By default, if a file named begin.tex exists in the current working directory, it is included in that
+place, otherwise just the \begin{document} statement is produced. 
+
+=item -l --listing <base> 
+
+uses the filenames <base>.tex, <base>.dvi etc instead of listing.tex, listing.dvi etc. as output file
+names. 
+
+=item -st --styles <stylefiles> 
+
+uses the LaTeX2e style files <stylefiles> in the \documentclass statement as "options". The files must
+be comma-separated (but no spaces!). Default is 'fleqn,twoside'.
+
+=item -pa --packages <packagefiles>
+
+includes the LaTeX packages <packagefiles> by \usepackage statements. The files must be comma- separated
+(but no spaces!). Default is 'a4'.  The package makeidx is always appended to the list unless the option
+--noindex is given, and the package psfig is always prepended to the list unless --nopsfig is given. 
+
+=item --print <prt> 
+
+causes B<listing> to pipe the resulting file (1 page/sheet) to the print command <prt>. This option
+implies --latex, --noxdvi, and --quiet. A useful print command <prt> looks like "lpr -Plp". 
+
+=item --print2 <prt> 
+
+causes B<listing> to pipe the resulting file (2 pages/sheet) to the print command <prt>. This option
+implies --latex, --noxdvi, and --quiet. A useful print command <prt> looks like "lpr -Plp". 
+
+=back
+
+Now comes a list of options that can be set or unset. You can unset an option
+by prefixing it with a 'no' (e.g., --nolatex). This is particularly useful
+with options that are set by default.
+
+=over 8
+
+=item -q --quiet 
+
+causes B<listing> not to list the conversions going on. Also, the LaTeX/dvips/xdvi/psnup output and
+stderr is piped to /dev/null. Off by default. 
+
+=item -l --latex 
+
+causes B<listing> to call latex/dvips/psnup after it has finished the conversion process. On by default. 
+
+=item -x --xdvi 
+
+causes B<listing> to call xdvi after it has finished running latex. Implies --latex if set. Off by
+default. 
+
+=item -ps --psfig 
+
+puts a "psfig" in front of the style file list. This enables use of the \psfig command in your
+LaTeX-comments. On by default. 
+
+=item -i --index
+
+causes B<listing> to produce an index of words found in the source. Implies option --references. Off by
+default. 
+
+=item -t --toc
+
+causes B<listing> to produce a table of contents, which is however empty unless you set option
+--sections or write embedded LaTeX statements such as //\section{...} to generate entries. On by
+default. 
+
+=item -sy --symbols
+
+causes B<listing> to typeset certain special symbols (like Greek letters) in LaTeX's symbol font. On by
+default. 
+
+=item -se --sections
+
+produces a \section-command at the top of each file in the B<listing>. You can have the same effect by
+putting a #\section{...}-like comment on the first line of each file.  Off by default to encourage you
+to play around with LaTeX comments. 
+
+=item -fo --formfeeds 
+
+includes a \clearpage-command between files, so each file will start on a new page. On by default. 
+
+=item -r --references 
+
+produces a \label-command on every first occurence of an identifier, so you can use \pageref to refer to
+the page where an identifier is first declared. Off by default. 
+
+=item -pre --preservepod 
+
+preserves the original output of pod2latex for embedded POD (inline documentation).
+Otherwise, B<listing> cuts off the pod2latex generated \section-command and  
+downgrades subsequent \subsections and \subsubsections of POD documentation to 
+\subsubsections and \paragraphs. This default should make your POD documentation 
+look nicely embedded in the listing if you arrange each source file as 
+a LaTeX \section, then inside the source code use \subsections.
+The POD then fills one \subsection, being arranged into \subsubsections 
+and \paragraphs. Off by default.
+
+=back
+
+=head1 ENVIRONMENT
+
+=over 8
+
+=item LISTING
+
+Default arguments. These are simply prepended to the command line argument on every 
+call of B<listing>.
+
+=back
+
+=head1 FILES
+
+=over 8
+
+=item /usr/local/bin/listing
+
+The B<listing> script.
+
+=item /usr/local/man/man1/listing.1
+
+The man page, generated from Perl's POD. 
+You can produce the manpage by typing 'pod2man listing >listing.1'
+
+=back
+
+=head1 BUGS
+
+B<listing> has difficulties with very long source lines. Don't be bothered by overfull \hboxes.  Most of
+the time, the result looks good, and if some (few) lines are cut off at the right margin, live with it
+or insert a linebreak. 
+
+Certainly there are more bugs, since the Perl syntax is so hairy.  But with reasonable sane source code,
+B<listing> should do a good job. 
+
+=head1 AUTHOR
+
+Copyright 1998 by Chris Traxler <christoph.t.traxler@theo.physik.uni-giessen.de>. The GNU general
+public license applies. 
+
+Special thanks go to Nicolas Le Clerc <nleclerc@pobox.com> for working out a patch that uses
+Getopt::Long to simplify option handling. I also thank Vadim Belman <voland@plab.ku.dk> for
+pointing out a bug, and Mathias Weber <mweber@atlas.de> for useful hints regarding POD. 
+
+You are permitted to use and alter B<listing> under the terms of the GNU GPL. If you alter this file
+(and improve the program), I kindly ask you to send a copy to me at
+christoph.t.traxler@theo.physik.uni-giessen.de. You can retrieve a copy of the precise license terms at
+the URL ftp://prep.ai.mit.edu/pub/gnu/COPYING-2.0
+
+B<listing> can be retrieved from ftp://krabat.physik.uni-giessen.de/pub/traxler/
+
+=cut
+
+

@@ -1,0 +1,334 @@
+.rn '' }`
+''' $RCSfile$$Revision$$Date$
+'''
+''' $Log$
+'''
+.de Sh
+.br
+.if t .Sp
+.ne 5
+.PP
+\fB\\$1\fR
+.PP
+..
+.de Sp
+.if t .sp .5v
+.if n .sp
+..
+.de Ip
+.br
+.ie \\n(.$>=3 .ne \\$3
+.el .ne 3
+.IP "\\$1" \\$2
+..
+.de Vb
+.ft CW
+.nf
+.ne \\$1
+..
+.de Ve
+.ft R
+
+.fi
+..
+'''
+'''
+'''     Set up \*(-- to give an unbreakable dash;
+'''     string Tr holds user defined translation string.
+'''     Bell System Logo is used as a dummy character.
+'''
+.tr \(*W-|\(bv\*(Tr
+.ie n \{\
+.ds -- \(*W-
+.ds PI pi
+.if (\n(.H=4u)&(1m=24u) .ds -- \(*W\h'-12u'\(*W\h'-12u'-\" diablo 10 pitch
+.if (\n(.H=4u)&(1m=20u) .ds -- \(*W\h'-12u'\(*W\h'-8u'-\" diablo 12 pitch
+.ds L" ""
+.ds R" ""
+.ds L' '
+.ds R' '
+'br\}
+.el\{\
+.ds -- \(em\|
+.tr \*(Tr
+.ds L" ``
+.ds R" ''
+.ds L' `
+.ds R' '
+.ds PI \(*p
+'br\}
+.\"	If the F register is turned on, we'll generate
+.\"	index entries out stderr for the following things:
+.\"		TH	Title 
+.\"		SH	Header
+.\"		Sh	Subsection 
+.\"		Ip	Item
+.\"		X<>	Xref  (embedded
+.\"	Of course, you have to process the output yourself
+.\"	in some meaninful fashion.
+.if \nF \{
+.de IX
+.tm Index:\\$1\t\\n%\t"\\$2"
+..
+.nr % 0
+.rr F
+.\}
+.TH LISTING 1 "perl 5.004" "8/Jan/98" "User Contributed Perl Documentation"
+.IX Title "LISTING 1"
+.UC
+.IX Name "listing - C++ / Perl to LaTeX converter"
+.if n .hy 0
+.if n .na
+.ds C+ C\v'-.1v'\h'-1p'\s-2+\h'-1p'+\s0\v'.1v'\h'-1p'
+.de CQ          \" put $1 in typewriter font
+.ft CW
+'if n "\c
+'if t \\&\\$1\c
+'if n \\&\\$1\c
+'if n \&"
+\\&\\$2 \\$3 \\$4 \\$5 \\$6 \\$7
+'.ft R
+..
+.\" @(#)ms.acc 1.5 88/02/08 SMI; from UCB 4.2
+.	\" AM - accent mark definitions
+.bd B 3
+.	\" fudge factors for nroff and troff
+.if n \{\
+.	ds #H 0
+.	ds #V .8m
+.	ds #F .3m
+.	ds #[ \f1
+.	ds #] \fP
+.\}
+.if t \{\
+.	ds #H ((1u-(\\\\n(.fu%2u))*.13m)
+.	ds #V .6m
+.	ds #F 0
+.	ds #[ \&
+.	ds #] \&
+.\}
+.	\" simple accents for nroff and troff
+.if n \{\
+.	ds ' \&
+.	ds ` \&
+.	ds ^ \&
+.	ds , \&
+.	ds ~ ~
+.	ds ? ?
+.	ds ! !
+.	ds /
+.	ds q
+.\}
+.if t \{\
+.	ds ' \\k:\h'-(\\n(.wu*8/10-\*(#H)'\'\h"|\\n:u"
+.	ds ` \\k:\h'-(\\n(.wu*8/10-\*(#H)'\`\h'|\\n:u'
+.	ds ^ \\k:\h'-(\\n(.wu*10/11-\*(#H)'^\h'|\\n:u'
+.	ds , \\k:\h'-(\\n(.wu*8/10)',\h'|\\n:u'
+.	ds ~ \\k:\h'-(\\n(.wu-\*(#H-.1m)'~\h'|\\n:u'
+.	ds ? \s-2c\h'-\w'c'u*7/10'\u\h'\*(#H'\zi\d\s+2\h'\w'c'u*8/10'
+.	ds ! \s-2\(or\s+2\h'-\w'\(or'u'\v'-.8m'.\v'.8m'
+.	ds / \\k:\h'-(\\n(.wu*8/10-\*(#H)'\z\(sl\h'|\\n:u'
+.	ds q o\h'-\w'o'u*8/10'\s-4\v'.4m'\z\(*i\v'-.4m'\s+4\h'\w'o'u*8/10'
+.\}
+.	\" troff and (daisy-wheel) nroff accents
+.ds : \\k:\h'-(\\n(.wu*8/10-\*(#H+.1m+\*(#F)'\v'-\*(#V'\z.\h'.2m+\*(#F'.\h'|\\n:u'\v'\*(#V'
+.ds 8 \h'\*(#H'\(*b\h'-\*(#H'
+.ds v \\k:\h'-(\\n(.wu*9/10-\*(#H)'\v'-\*(#V'\*(#[\s-4v\s0\v'\*(#V'\h'|\\n:u'\*(#]
+.ds _ \\k:\h'-(\\n(.wu*9/10-\*(#H+(\*(#F*2/3))'\v'-.4m'\z\(hy\v'.4m'\h'|\\n:u'
+.ds . \\k:\h'-(\\n(.wu*8/10)'\v'\*(#V*4/10'\z.\v'-\*(#V*4/10'\h'|\\n:u'
+.ds 3 \*(#[\v'.2m'\s-2\&3\s0\v'-.2m'\*(#]
+.ds o \\k:\h'-(\\n(.wu+\w'\(de'u-\*(#H)/2u'\v'-.3n'\*(#[\z\(de\v'.3n'\h'|\\n:u'\*(#]
+.ds d- \h'\*(#H'\(pd\h'-\w'~'u'\v'-.25m'\f2\(hy\fP\v'.25m'\h'-\*(#H'
+.ds D- D\\k:\h'-\w'D'u'\v'-.11m'\z\(hy\v'.11m'\h'|\\n:u'
+.ds th \*(#[\v'.3m'\s+1I\s-1\v'-.3m'\h'-(\w'I'u*2/3)'\s-1o\s+1\*(#]
+.ds Th \*(#[\s+2I\s-2\h'-\w'I'u*3/5'\v'-.3m'o\v'.3m'\*(#]
+.ds ae a\h'-(\w'a'u*4/10)'e
+.ds Ae A\h'-(\w'A'u*4/10)'E
+.ds oe o\h'-(\w'o'u*4/10)'e
+.ds Oe O\h'-(\w'O'u*4/10)'E
+.	\" corrections for vroff
+.if v .ds ~ \\k:\h'-(\\n(.wu*9/10-\*(#H)'\s-2\u~\d\s+2\h'|\\n:u'
+.if v .ds ^ \\k:\h'-(\\n(.wu*10/11-\*(#H)'\v'-.4m'^\v'.4m'\h'|\\n:u'
+.	\" for low resolution devices (crt and lpr)
+.if \n(.H>23 .if \n(.V>19 \
+\{\
+.	ds : e
+.	ds 8 ss
+.	ds v \h'-1'\o'\(aa\(ga'
+.	ds _ \h'-1'^
+.	ds . \h'-1'.
+.	ds 3 3
+.	ds o a
+.	ds d- d\h'-1'\(ga
+.	ds D- D\h'-1'\(hy
+.	ds th \o'bp'
+.	ds Th \o'LP'
+.	ds ae ae
+.	ds Ae AE
+.	ds oe oe
+.	ds Oe OE
+.\}
+.rm #[ #] #H #V #F C
+.SH "NAME"
+.IX Header "NAME"
+listing \- \*(C+ / Perl to LaTeX converter
+.SH "SYNOPSIS"
+.IX Header "SYNOPSIS"
+\fBlisting\fR \fIoptions\fR \fIfilenames\fR
+.PP
+where \fIfilenames\fR is a sequence of \*(C+ or Perl files (mixing allowed).
+.SH "DESCRIPTION"
+.IX Header "DESCRIPTION"
+\fBlisting\fR converts the files to a single LaTeX file listing.tex and runs latex, dvips and psnup on it.
+The results are a DVI file listing.dvi, a Postscript file listing1.ps (1 page/sheet), and a Postscript
+file listing.ps (2 pages/sheet). 
+.Ip "o" 8
+.IX Item "o"
+Keywords, \*(C+ preprocessor commands, strings and comments are typeset in different fonts.
+.Ip "o" 8
+.IX Item "o"
+Font size varies with nesting level ({...}).
+.Ip "o" 8
+.IX Item "o"
+LaTeX verbatim comments in the styles /*tex...*/, //tex..., //\esection...  
+(resp for Perl #tex... etc) allow you to embed pictures and formulas in your comments.
+.Ip "o" 8
+.IX Item "o"
+A table of contents (\s-1TOC\s0) is produced.
+.Ip "o" 8
+.IX Item "o"
+Identifiers can be collected in an index. (option --index)
+For the first occurrence of each identifier, a \elabel- command can be generated, 
+so you can use \epageref in your LaTeX comments to refer to definitions. (option --references)
+.Ip "o" 8
+.IX Item "o"
+Perl \s-1POD\s0 inline documentation is automatically run through pod2latex and included in the 
+resulting LaTeX file.
+.SH "OPTIONS"
+.IX Header "OPTIONS"
+\fBlisting\fR is highly configurable, taking options from the command line as well as the environment
+variable \fB\s-1LISTING\s0\fR. Valid options are listed in the following.  For each option, both the short and
+long form are given. 
+.Ip "-v --version " 8
+.IX Item "-v --version "
+prints the version number and exits.
+.Ip "-b --begin <header> " 8
+.IX Item "-b --begin <header> "
+includes the file <header> at the place where otherwise the LaTeX\-command \ebegin{document} would stand. 
+By default, if a file named begin.tex exists in the current working directory, it is included in that
+place, otherwise just the \ebegin{document} statement is produced. 
+.Ip "-l --listing <base> " 8
+.IX Item "-l --listing <base> "
+uses the filenames <base>.tex, <base>.dvi etc instead of listing.tex, listing.dvi etc. as output file
+names. 
+.Ip "-st --styles <stylefiles> " 8
+.IX Item "-st --styles <stylefiles> "
+uses the LaTeX2e style files <stylefiles> in the \edocumentclass statement as \*(L"options\*(R". The files must
+be comma-separated (but no spaces!). Default is \*(L'fleqn,twoside\*(R'.
+.Ip "-pa --packages <packagefiles>" 8
+.IX Item "-pa --packages <packagefiles>"
+includes the LaTeX packages <packagefiles> by \eusepackage statements. The files must be comma- separated
+(but no spaces!). Default is \*(L'a4\*(R'.  The package makeidx is always appended to the list unless the option
+--noindex is given, and the package psfig is always prepended to the list unless --nopsfig is given. 
+.Ip "--print <prt> " 8
+.IX Item "--print <prt> "
+causes \fBlisting\fR to pipe the resulting file (1 page/sheet) to the print command <prt>. This option
+implies --latex, --noxdvi, and --quiet. A useful print command <prt> looks like \*(L"lpr \-Plp\*(R". 
+.Ip "--print2 <prt> " 8
+.IX Item "--print2 <prt> "
+causes \fBlisting\fR to pipe the resulting file (2 pages/sheet) to the print command <prt>. This option
+implies --latex, --noxdvi, and --quiet. A useful print command <prt> looks like \*(L"lpr \-Plp\*(R". 
+.PP
+Now comes a list of options that can be set or unset. You can unset an option
+by prefixing it with a \*(L'no\*(R' (e.g., --nolatex). This is particularly useful
+with options that are set by default.
+.Ip "-q --quiet " 8
+.IX Item "-q --quiet "
+causes \fBlisting\fR not to list the conversions going on. Also, the LaTeX/dvips/xdvi/psnup output and
+stderr is piped to /dev/null. Off by default. 
+.Ip "-l --latex " 8
+.IX Item "-l --latex "
+causes \fBlisting\fR to call latex/dvips/psnup after it has finished the conversion process. On by default. 
+.Ip "-x --xdvi " 8
+.IX Item "-x --xdvi "
+causes \fBlisting\fR to call xdvi after it has finished running latex. Implies --latex if set. Off by
+default. 
+.Ip "-ps --psfig " 8
+.IX Item "-ps --psfig "
+puts a \*(L"psfig\*(R" in front of the style file list. This enables use of the \epsfig command in your
+LaTeX\-comments. On by default. 
+.Ip "-i --index" 8
+.IX Item "-i --index"
+causes \fBlisting\fR to produce an index of words found in the source. Implies option --references. Off by
+default. 
+.Ip "-t --toc" 8
+.IX Item "-t --toc"
+causes \fBlisting\fR to produce a table of contents, which is however empty unless you set option
+--sections or write embedded LaTeX statements such as //\esection{...} to generate entries. On by
+default. 
+.Ip "-sy --symbols" 8
+.IX Item "-sy --symbols"
+causes \fBlisting\fR to typeset certain special symbols (like Greek letters) in LaTeX's symbol font. On by
+default. 
+.Ip "-se --sections" 8
+.IX Item "-se --sections"
+produces a \esection-command at the top of each file in the \fBlisting\fR. You can have the same effect by
+putting a #\esection{...}\-like comment on the first line of each file.  Off by default to encourage you
+to play around with LaTeX comments. 
+.Ip "-fo --formfeeds " 8
+.IX Item "-fo --formfeeds "
+includes a \eclearpage-command between files, so each file will start on a new page. On by default. 
+.Ip "-r --references " 8
+.IX Item "-r --references "
+produces a \elabel-command on every first occurence of an identifier, so you can use \epageref to refer to
+the page where an identifier is first declared. Off by default. 
+.Ip "-pre --preservepod " 8
+.IX Item "-pre --preservepod "
+preserves the original output of pod2latex for embedded \s-1POD\s0 (inline documentation).
+Otherwise, \fBlisting\fR cuts off the pod2latex generated \esection-command and  
+downgrades subsequent \esubsections and \esubsubsections of \s-1POD\s0 documentation to 
+\esubsubsections and \eparagraphs. This default should make your \s-1POD\s0 documentation 
+look nicely embedded in the listing if you arrange each source file as 
+a LaTeX \esection, then inside the source code use \esubsections.
+The \s-1POD\s0 then fills one \esubsection, being arranged into \esubsubsections 
+and \eparagraphs. Off by default.
+.SH "ENVIRONMENT"
+.IX Header "ENVIRONMENT"
+.Ip "\s-1LISTING\s0" 8
+.IX Item "\s-1LISTING\s0"
+Default arguments. These are simply prepended to the command line argument on every 
+call of \fBlisting\fR.
+.SH "FILES"
+.IX Header "FILES"
+.Ip "/usr/local/bin/listing" 8
+.IX Item "/usr/local/bin/listing"
+The \fBlisting\fR script.
+.Ip "/usr/local/man/man1/listing.1" 8
+.IX Item "/usr/local/man/man1/listing.1"
+The man page, generated from Perl's \s-1POD\s0. 
+You can produce the manpage by typing \*(L'pod2man listing >listing.1\*(R'
+.SH "BUGS"
+.IX Header "BUGS"
+\fBlisting\fR has difficulties with very long source lines. Don't be bothered by overfull \ehboxes.  Most of
+the time, the result looks good, and if some (few) lines are cut off at the right margin, live with it
+or insert a linebreak. 
+.PP
+Certainly there are more bugs, since the Perl syntax is so hairy.  But with reasonable sane source code,
+\fBlisting\fR should do a good job. 
+.SH "AUTHOR"
+.IX Header "AUTHOR"
+Copyright 1998 by Chris Traxler <christoph.t.traxler@theo.physik.uni-giessen.de>. The GNU general
+public license applies. 
+.PP
+Special thanks go to Nicolas Le Clerc <nleclerc@pobox.com> for working out a patch that uses
+Getopt::Long to simplify option handling. I also thank Vadim Belman <voland@plab.ku.dk> for
+pointing out a bug, and Mathias Weber <mweber@atlas.de> for useful hints regarding POD. 
+.PP
+You are permitted to use and alter \fBlisting\fR under the terms of the GNU GPL. If you alter this file
+(and improve the program), I kindly ask you to send a copy to me at
+christoph.t.traxler@theo.physik.uni-giessen.de. You can retrieve a copy of the precise license terms at
+the URL ftp://prep.ai.mit.edu/pub/gnu/COPYING\-2.0
+.PP
+\fBlisting\fR can be retrieved from ftp://krabat.physik.uni-giessen.de/pub/traxler/
+
+.rn }` ''
