@@ -31,7 +31,7 @@ use Getopt::Long;
 
 #\subsection{Command-Line Parsing}
 
-my $version='$Id: listing,v 2.23 1998/04/17 13:58:45 cvstraxler Exp $'; # 1.0 was written in flex
+my $version='$Id: listing,v 2.24 1998/04/20 09:37:39 cvstraxler Exp $'; # 1.0 was written in flex
 $version =~ s/^.*listing,v ([0-9.\/ ]*) ..:..:.. cvs.*$/$1/;
 
 # prepend the contents of the environment variable LISTING to the command line
@@ -1480,5 +1480,3 @@ the URL ftp://prep.ai.mit.edu/pub/gnu/COPYING-2.0
 B<listing> can be retrieved from any CPAN mirror or from ftp://krabat.physik.uni-giessen.de/pub/traxler/
 
 =cut
-
-

@@ -1,0 +1,165 @@
+NAME
+    listing - C++ / Perl to LaTeX converter
+
+SYNOPSIS
+    listing *options* *filenames*
+
+    where *filenames* is a sequence of C++ or Perl files (mixing allowed).
+
+DESCRIPTION
+    listing converts the files to a single LaTeX file listing.tex and runs latex, dvips and psnup on it.
+    The results are a DVI file listing.dvi, a Postscript file listing1.ps (1 page/sheet), and a Postscript
+    file listing.ps (2 pages/sheet).
+
+    o       Keywords, C++ preprocessor commands, strings and comments are typeset in different fonts.
+
+    o       Font size varies with nesting level ({...}).
+
+    o       LaTeX verbatim comments in the styles /*tex...*/, //tex..., //\section... (resp for Perl #tex...
+            etc) allow you to embed pictures and formulas in your comments.
+
+    o       A table of contents (TOC) is produced.
+
+    o       Identifiers can be collected in an index. (option --index) For the first occurrence of each
+            identifier, a \label- command can be generated, so you can use \pageref in your LaTeX comments
+            to refer to definitions. (option --references)
+
+    o       Perl POD inline documentation is automatically run through pod2latex and included in the resulting
+            LaTeX file.
+
+OPTIONS
+            listing is highly configurable, taking options from the command line as well as the
+            environment variable LISTING. Valid options are listed in the following. For each option, both
+            the short and long form are given.
+
+    -v --version
+            prints the version number and exits.
+
+    -b --begin <header>
+            includes the file <header> at the place where otherwise the LaTeX-command \begin{document}
+            would stand. By default, if a file named begin.tex exists in the current working directory, it
+            is included in that place, otherwise just the \begin{document} statement is produced.
+
+    -l --listing <base>
+            uses the filenames <base>.tex, <base>.dvi etc instead of listing.tex, listing.dvi etc. as
+            output file names.
+
+    -st --styles <stylefiles>
+            uses the LaTeX2e style files <stylefiles> in the \documentclass statement as "options". The
+            files must be comma-separated (but no spaces!). Default is 'fleqn,twoside'.
+
+    -pa --packages <packagefiles>
+            includes the LaTeX packages <packagefiles> by \usepackage statements. The files must be comma-
+            separated (but no spaces!). Default is 'a4'. The package makeidx is always appended to the
+            list unless the option --noindex is given, and the package psfig is always prepended to the
+            list unless --nopsfig is given.
+
+    --print <prt>
+            causes listing to pipe the resulting file (1 page/sheet) to the print command <prt>. This
+            option implies --latex, --noxdvi, and --quiet. A useful print command <prt> looks like "lpr -
+            Plp".
+
+    --print2 <prt>
+            causes listing to pipe the resulting file (2 pages/sheet) to the print command <prt>. This
+            option implies --latex, --noxdvi, and --quiet. A useful print command <prt> looks like "lpr -
+            Plp".
+
+    What follows is a list of options that can be set or unset. You can unset an option by prefixing it
+    with a 'no' (e.g., --nolatex). This is particularly useful with options that are set by default.
+
+    -q --quiet
+            causes listing not to list the conversions going on. Also, the LaTeX/dvips/xdvi/psnup output
+            and stderr is piped to /dev/null. Off by default.
+
+    -l --latex
+            causes listing to call latex/dvips/psnup after it has finished the conversion process. On by
+            default.
+
+    -x --xdvi
+            causes listing to call xdvi after it has finished running latex. Implies --latex if set. Off
+            by default.
+
+    -ps --psfig
+            puts a "psfig" in front of the style file list. This enables use of the \psfig command in your
+            LaTeX-comments. On by default.
+
+    -i --index
+            causes listing to produce an index of words found in the source. Implies option --references.
+            Off by default.
+
+    -t --toc
+            causes listing to produce a table of contents, which is however empty unless you set option --
+            sections or write embedded LaTeX statements such as //\section{...} to generate entries. On by
+            default.
+
+    -sy --symbols
+            causes listing to typeset certain special symbols (like Greek letters) in LaTeX's symbol font.
+            On by default.
+
+    -sm --smallfonts
+            causes listing to use a smaller font set. On by default.
+
+    -co --color
+            causes listing to do syntax highlighting by LaTeX colors. Try it - it's cool! But since not
+            everybody has a color printer: off by default.
+
+    -se --sections
+            produces a \section-command at the top of each file in the listing. You can have the same
+            effect by putting a #\section{...}-like comment on the first line of each file. Off by default
+            to encourage you to play around with LaTeX comments.
+
+    -fo --formfeeds
+            includes a \clearpage-command between files, so each file will start on a new page. On by
+            default.
+
+    -r --references
+            produces a \label-command on every first occurence of an identifier, so you can use \pageref
+            to refer to the page where an identifier is first declared. Off by default.
+
+    -pre --preservepod
+            preserves the original output of pod2latex for embedded POD (inline documentation). Otherwise,
+            listing cuts off the pod2latex generated \section-command and downgrades subsequent
+            \subsections and \subsubsections of POD documentation to \subsubsections and \paragraphs. This
+            default should make your POD documentation look nicely embedded in the listing if you arrange
+            each source file as a LaTeX \section, then inside the source code use \subsections. The POD
+            then fills one \subsection, being arranged into \subsubsections and \paragraphs. Off by
+            default.
+
+ENVIRONMENT
+    LISTING Default arguments. These are simply prepended to the command line argument on every call of
+            listing.
+
+FILES
+    /usr/local/bin/listing
+            The listing script.
+
+    /usr/local/man/man1/listing.1
+            The man page, generated from Perl's POD. You can produce the manpage by typing 'pod2man
+            listing >listing.1'
+
+BUGS
+    listing has difficulties with very long source lines. Don't be bothered by overfull \hboxes. Most of
+    the time, the result looks good, and if some (few) lines are cut off at the right margin, live with it
+    or insert a linebreak.
+
+    Certainly there are more bugs, since the Perl syntax is so hairy. But with reasonable sane source
+    code, listing should do a good job.
+
+AUTHOR
+    Copyright 1998 by Chris Traxler <christoph.t.traxler@theo.physik.uni-giessen.de>. The GNU general
+    public license applies.
+
+    Special thanks go to Nicolas Le Clerc <nleclerc@pobox.com> for working out a patch that uses
+    Getopt::Long to simplify option handling. I also thank Vadim Belman <voland@plab.ku.dk> for pointing
+    out a bug, and Mathias Weber <mweber@atlas.de> for useful hints regarding POD.
+
+    Piotr Klaban <makler@man.torun.pl> added the --smallfonts option as well as the cool --color option.
+    Thanks, Piotr!
+
+    You are permitted to use and alter listing under the terms of the GNU GPL. If you alter this file (and
+    improve the program), I kindly ask you to send a copy to me at christoph.t.traxler@theo.physik.uni-
+    giessen.de. You can retrieve a copy of the precise license terms at the URL
+    ftp://prep.ai.mit.edu/pub/gnu/COPYING-2.0
+
+    listing can be retrieved from any CPAN mirror or from ftp://krabat.physik.uni-giessen.de/pub/traxler/
+
