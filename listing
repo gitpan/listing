@@ -27,7 +27,7 @@ use Getopt::Long;
 
 #\subsection{Command-Line Parsing}
 
-my $version='$Id: listing,v 2.15 1998/01/08 17:23:20 cvstraxler Exp $'; # 1.0 was written in flex
+my $version='$Id: listing,v 2.17 1998/02/03 10:10:12 cvstraxler Exp $'; # 1.0 was written in flex
 $version =~ s/^.*listing,v ([0-9.\/ ]*) ..:..:.. cvs.*$/$1/;
 
 # prepend the contents of the environment variable LISTING to the command line
@@ -65,7 +65,7 @@ die "Cannot open ".$option{'begin'}.".\n" if($option{'begin'} && ! -r $option{'b
 
 foreach(@ARGV)
 {
-    die "File $_ is nonexistent/non-readable." unless(-r $_);
+    print "Warning: Cannot find/open input file $_.\n" unless(-r $_);
 }
 
 $option{'packages'} = 'psfig,'.$option{'packages'} if($option{'psfig'});
@@ -361,6 +361,12 @@ my $firstfile=1;
 while(@ARGV)
 {
   my $filename = $ARGV[0];
+  unless(-r $filename)
+  {
+      shift;
+      next;
+  }
+
   print "converting file ".$filename."... " unless($option{'quiet'});
   my $raw=<>; # read file
 
