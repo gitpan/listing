@@ -2,14 +2,18 @@
 
 #\section{Pretty-Printing C++/Perl with the `listing' Script}
 
-#tex \copyright\ Copyright 1998 by Chris Traxler $<$christoph.t.traxler\@theo.physik.uni-giessen.de$>$.
+#tex \copyright\ Copyright 1998 by Chris Traxler $<$christoph.t.traxler@theo.physik.uni-giessen.de$>$.
 # The GNU general public license applies.
 
 ##############################################################################
 # Special thanks go to Nicolas Le Clerc <nleclerc@pobox.com> for working out 
 # a patch that uses Getopt::Long to simplify option handling.
+#
 # I also thank Vadim Belman <voland@plab.ku.dk> for pointing out a bug,
 # and Mathias Weber <mweber@atlas.de> for useful hints regarding POD.
+#
+# Thanks to Piotr Klaban <makler@man.torun.pl>, listing now supports
+# the --color and --smallfonts options.
 #-----------------------------------------------------------------------------
 # You are permitted to use and alter this file under the terms of the GNU GPL.
 # If you alter this file (improve the program), I kindly ask you to send 
@@ -27,7 +31,7 @@ use Getopt::Long;
 
 #\subsection{Command-Line Parsing}
 
-my $version='$Id: listing,v 2.17 1998/02/03 10:10:12 cvstraxler Exp $'; # 1.0 was written in flex
+my $version='$Id: listing,v 2.23 1998/04/17 13:58:45 cvstraxler Exp $'; # 1.0 was written in flex
 $version =~ s/^.*listing,v ([0-9.\/ ]*) ..:..:.. cvs.*$/$1/;
 
 # prepend the contents of the environment variable LISTING to the command line
@@ -52,14 +56,16 @@ my %option = (
               'sections'      => 0,
               'formfeeds'     => 1,
               'references'    => 0,
-              'preservepod'   => 0
+              'preservepod'   => 0,
+              'color'         => 0,
+              'smallfonts'    => 1
              );
 
 # get options
 &GetOptions(\%option, 'version', 'begin=s', 'listing=s', 'styles=s', 
             'packages=s', 'print=s', 'print2=s', 'symbols!', 'psfig!', 
             'quiet!', 'latex!', 'xdvi!', 'toc!', 'index!', 'sections!', 
-            'formfeeds!', 'references', 'preservepod!');
+            'formfeeds!', 'references', 'preservepod!', 'color!', 'smallfonts!');
 
 die "Cannot open ".$option{'begin'}.".\n" if($option{'begin'} && ! -r $option{'begin'});
 
@@ -119,18 +125,54 @@ my $tag='['.join('',@tags).']';
 my $notag='[^'.join('',@tags).']';
 my %tagprotector;
 
+# LaTeX font colors
+
+my (%definecolor,$definecolors,$item,%col) = ();
+
+if ($option{color})
+{
+    $option{'packages'} .= ',color';
+    $definecolor{'standard'}="[rgb]{0,0,0}";
+    $definecolor{'keyword'}="[rgb]{0.65,0.15,0.15}";
+    $definecolor{'type'}="[rgb]{0.17,0.55,0.33}";
+    $definecolor{'preprocessor'}="[rgb]{0.63,0.12,0.95}";
+    $definecolor{'comment'}="[rgb]{0,0,1}";
+    $definecolor{'string'}="[rgb]{1,0,1}";
+    $definecolor{'heredoc'}="[rgb]{0.6,0,0.6}";
+    $definecolor{'heredocterm'}="[rgb]{0.6,0,0.6}";
+    $definecolor{'format'}="[rgb]{0,0,0}";
+    $definecolor{'regex'}="[rgb]{0.5,0.5,0.5}";
+    $definecolor{'quotation'}="[rgb]{1,0,1}";
+    foreach $item ('standard','keyword','type','preprocessor',
+		   'comment','string','heredoc','heredocterm',
+		   'format','regex','quotation') 
+    {
+	$col{$item} = '\color'.$definecolor{$item}.' ';
+    }
+}
+else 
+{
+    foreach $item ('standard','keyword','type','preprocessor',
+		   'comment','string','heredoc','heredocterm',
+		   'format','regex','quotation') 
+    {
+	$col{$item} = '';
+    }
+}
+
 # LaTeX fonts for certain kinds of source text
 my %font=(
-	  'standard'    => '\rm ', # source text
-	  'keyword'     => '\bf ', # language keywords
-	  'preprocessor'=> '\tt ', # C++ preprocessor keywords
-	  'comment'     => '\it ', # comments
-	  'string'      => '\sl ', # strings and characters
-	  'heredoc'     => '\sl ', # Perl multiline strings or "here-documents" ( <<EOF...EOF )
-	  'heredocterm' => '\bf ', # Perl multiline strings or "here-documents" ( <<EOF...EOF )
-	  'format'      => '\tt ', # Perl formats ( format XYZ = ... . )
-	  'regex'       => '\tt ', # Perl regular expressions
-	  'quotation'   => '\sl '  # Perl quotations
+	  'standard'    => '\tt ', # source text
+	  'keyword'     => '\bf '.$col{keyword},      # language keywords
+	  'type'        => '\tt '.$col{type},         # language types
+	  'preprocessor'=> '\tt '.$col{preprocessor}, # C++ preprocessor keywords
+	  'comment'     => '\it '.$col{comment},      # comments
+	  'string'      => '\sl '.$col{string},       # strings and characters
+	  'heredoc'     => '\sl '.$col{heredoc},      # Perl multiline strings or "here-documents" ( <<EOF...EOF )
+	  'heredocterm' => '\bf '.$col{heredocterm},  # Perl multiline strings or "here-documents" ( <<EOF...EOF )
+	  'format'      => '\tt '.$col{"format"},       # Perl formats ( format XYZ = ... . )
+	  'regex'       => '\tt '.$col{regex},        # Perl regular expressions
+	  'quotation'   => '\sl '.$col{quotation}     # Perl quotations
 	  );
 
 foreach (keys %font)
@@ -139,7 +181,15 @@ foreach (keys %font)
 }
 
 # LaTeX font sizes
-my @fontsize=(qw(scriptsize footnotesize footnotesize small small normalsize normalsize large));
+my @fontsize;
+if ($option{'smallfonts'}) 
+{
+    @fontsize=(qw(scriptsize footnotesize footnotesize small small normalsize));
+} 
+else 
+{
+    @fontsize=(qw(tiny scriptsize scriptsize footnotesize footnotesize small));
+}
 
 foreach (@fontsize)
 {
@@ -156,14 +206,26 @@ my %linesymbols=(
                 );
 
 # keywords
-my @cppkeywords=(qw(auto double int struct break else long switch case enum register typedef char
-	            extern return union const float short unsigned continue for signed void default
-                    goto sizeof volatile do if static while template mutable
-                    new delete this operator class public protected private virtual friend 
-                    inline dynamic typeof all except exception raise raises reraise try asm catch 
+my @cppkeywords=(qw(break else switch case enum
+	            return continue for default
+                    goto sizeof do if while template
+                    new delete this operator
+                    typeof all except exception raise raises reraise try asm catch 
                     overload));
 
+my @cpptypes=(qw(auto double int struct else long enum typedef register char
+		 extern union const float short unsigned signed void
+		 volatile static template
+		 class public protected private virtual friend 
+		 inline dynamic 
+		 ));
+
 foreach (@cppkeywords)
+{
+  $_ = tag('C', protect($_));
+}
+
+foreach (@cpptypes)
 {
   $_ = tag('C', protect($_));
 }
@@ -191,6 +253,7 @@ foreach (@perlkeywords)
 }
 
 my %keywordpattern=('C++' => join('|', @cppkeywords),
+		    'Ctypes' => join('|',@cpptypes),
 		    'preprocessor' => join('|', @preprocessorkeywords),
 		    'Perl' => join('|', @perlkeywords));
 
@@ -360,15 +423,12 @@ my $firstfile=1;
 # read file by file
 while(@ARGV)
 {
-  my $filename = $ARGV[0];
-  unless(-r $filename)
-  {
-      shift;
-      next;
-  }
-
-  print "converting file ".$filename."... " unless($option{'quiet'});
-  my $raw=<>; # read file
+  my $filename = shift(@ARGV);
+  next unless(-r $filename);
+  print "converting file $filename ... " unless($option{'quiet'});
+  open(FILE,$filename) || die "open $filename: $!";
+  my $raw=join("",<FILE>); # read file
+  close(FILE) || die "close $filename: $!";
 
   # remove leading and trailing empty lines. remove trailing whitespace in each line
   $raw =~ s/^(\s|\n)*//; 
@@ -543,13 +603,13 @@ while(@ARGV)
         #   the user.
         #   THAT
         # works!
-	if(substr($raw, $position, -1) =~ /^(<<['"]?)([a-zA-Z_0-9]*)(['"]?)/) 
+	if(substr($raw, $position, -1) =~ /^(<<[\'\"]?)([a-zA-Z_0-9]*)([\'\"]?)/) 
         {
           my $start = $1;
           my $terminator = $2;
           my $end = $3;
 
-          $source .= tag('S', $start).tag('X', '{'.$font{'heredocterm'}.$terminator.'}').$end;
+          $source .= tag('S', $start).tag('X','{'.$font{'heredocterm'}.$terminator.'}').tag('S',$end);
           $position += length($start)+length($terminator);
           $position += length($end) if($end);
 
@@ -829,7 +889,16 @@ while(@ARGV)
     my $kwpat = $keywordpattern{'preprocessor'};
 
     $start = tag('X', '{'.$font{'preprocessor'}.'\#');
-    $source =~ s/C\# ($kwpat) (.[^a-zA-Z])/$start.tag('X', $1)."X}F^X\n".$2/egx;
+    $source =~ s/C\#\s*($kwpat) (.[^a-zA-Z])/$start.tag('X', $1)."X}F^X\n".$2/egx;
+
+    die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
+
+    print "converting C++ types ...\n" unless($option{'quiet'});
+    $ft = $font{'type'};
+    $kwpat = $keywordpattern{'Ctypes'};
+
+    $start = tag('X', '{'.$font{'type'});
+    $source =~ s/(.[^a-zA-Z])($kwpat)(.[^a-zA-Z])/$1.$start.$2.'X}'.$3/egx;
 
     die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
   }
@@ -987,13 +1056,13 @@ while(@ARGV)
     die "Internal error (tagging): $1" if($source =~ /($notag$notag)/);
   
     # short symbol tokens: will be replaced unless they are part of a longer word 
-    # (but: underscore counts as separator!) 
+    # (but: underscores count as separators!) 
     foreach $sym (@shortsymbols)
     {
       my $rep=tag('T', "\$\\".$sym."\$");
       $pat=tag('C', $sym);
 
-      $source =~ s/(.[^a-zA-Z_])$pat(.[^a-zA-Z_])/$1$rep$2/g;
+      $source =~ s/(.[^a-zA-Z])$pat(.[^a-zA-Z])/$1$rep$2/g;
       print "." unless($option{'quiet'});
     }
     print "\n" unless($option{'quiet'});
@@ -1278,7 +1347,7 @@ implies --latex, --noxdvi, and --quiet. A useful print command <prt> looks like 
 
 =back
 
-Now comes a list of options that can be set or unset. You can unset an option
+What follows is a list of options that can be set or unset. You can unset an option
 by prefixing it with a 'no' (e.g., --nolatex). This is particularly useful
 with options that are set by default.
 
@@ -1318,6 +1387,15 @@ default.
 
 causes B<listing> to typeset certain special symbols (like Greek letters) in LaTeX's symbol font. On by
 default. 
+
+=item -sm --smallfonts
+
+causes B<listing> to use a smaller font set. On by default. 
+
+=item -co --color
+
+causes B<listing> to do syntax highlighting by LaTeX colors. Try it - it's cool!
+But since not everybody has a color printer: off by default. 
 
 =item -se --sections
 
@@ -1391,12 +1469,15 @@ Special thanks go to Nicolas Le Clerc <nleclerc@pobox.com> for working out a pat
 Getopt::Long to simplify option handling. I also thank Vadim Belman <voland@plab.ku.dk> for
 pointing out a bug, and Mathias Weber <mweber@atlas.de> for useful hints regarding POD. 
 
+Piotr Klaban <makler@man.torun.pl> added the --smallfonts option as well as the cool --color option.
+Thanks, Piotr!
+
 You are permitted to use and alter B<listing> under the terms of the GNU GPL. If you alter this file
 (and improve the program), I kindly ask you to send a copy to me at
 christoph.t.traxler@theo.physik.uni-giessen.de. You can retrieve a copy of the precise license terms at
 the URL ftp://prep.ai.mit.edu/pub/gnu/COPYING-2.0
 
-B<listing> can be retrieved from ftp://krabat.physik.uni-giessen.de/pub/traxler/
+B<listing> can be retrieved from any CPAN mirror or from ftp://krabat.physik.uni-giessen.de/pub/traxler/
 
 =cut
 

@@ -73,7 +73,7 @@
 .nr % 0
 .rr F
 .\}
-.TH LISTING 1 "perl 5.004" "3/Feb/98" "User Contributed Perl Documentation"
+.TH LISTING 1 "perl 5.004" "17/Apr/98" "User Contributed Perl Documentation"
 .IX Title "LISTING 1"
 .UC
 .IX Name "listing - C++ / Perl to LaTeX converter"
@@ -239,7 +239,7 @@ implies --latex, --noxdvi, and --quiet. A useful print command <prt> looks like 
 causes \fBlisting\fR to pipe the resulting file (2 pages/sheet) to the print command <prt>. This option
 implies --latex, --noxdvi, and --quiet. A useful print command <prt> looks like \*(L"lpr \-Plp\*(R". 
 .PP
-Now comes a list of options that can be set or unset. You can unset an option
+What follows is a list of options that can be set or unset. You can unset an option
 by prefixing it with a \*(L'no\*(R' (e.g., --nolatex). This is particularly useful
 with options that are set by default.
 .Ip "-q --quiet " 8
@@ -270,6 +270,13 @@ default.
 .IX Item "-sy --symbols"
 causes \fBlisting\fR to typeset certain special symbols (like Greek letters) in LaTeX's symbol font. On by
 default. 
+.Ip "-sm --smallfonts" 8
+.IX Item "-sm --smallfonts"
+causes \fBlisting\fR to use a smaller font set. On by default. 
+.Ip "-co --color" 8
+.IX Item "-co --color"
+causes \fBlisting\fR to do syntax highlighting by LaTeX colors. Try it \- it's cool!
+But since not everybody has a color printer: off by default. 
 .Ip "-se --sections" 8
 .IX Item "-se --sections"
 produces a \esection-command at the top of each file in the \fBlisting\fR. You can have the same effect by
@@ -324,11 +331,14 @@ Special thanks go to Nicolas Le Clerc <nleclerc@pobox.com> for working out a pat
 Getopt::Long to simplify option handling. I also thank Vadim Belman <voland@plab.ku.dk> for
 pointing out a bug, and Mathias Weber <mweber@atlas.de> for useful hints regarding POD. 
 .PP
+Piotr Klaban <makler@man.torun.pl> added the --smallfonts option as well as the cool --color option.
+Thanks, Piotr!
+.PP
 You are permitted to use and alter \fBlisting\fR under the terms of the GNU GPL. If you alter this file
 (and improve the program), I kindly ask you to send a copy to me at
 christoph.t.traxler@theo.physik.uni-giessen.de. You can retrieve a copy of the precise license terms at
 the URL ftp://prep.ai.mit.edu/pub/gnu/COPYING\-2.0
 .PP
-\fBlisting\fR can be retrieved from ftp://krabat.physik.uni-giessen.de/pub/traxler/
+\fBlisting\fR can be retrieved from any CPAN mirror or from ftp://krabat.physik.uni-giessen.de/pub/traxler/
 
 .rn }` ''
